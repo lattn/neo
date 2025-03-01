@@ -3,6 +3,7 @@ package neo
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,4 +108,21 @@ func TestTextUnmarshaler(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "TU_ORIGINAL", a.ATU.UValue)
 	assert.Equal(t, "ORIGINAL", a.NTU)
+}
+
+func TestRead(t *testing.T) {
+	req, _ := http.NewRequest(http.MethodPost, "/", strings.NewReader(`{"foo":"bar"}`))
+	req.Header.Set("Content-Type", "application/json")
+	c := NewContext(nil, req)
+	type a struct {
+		Foo string `json:"foo"`
+	}
+	v, err := Read[a](c)
+	if err != nil {
+		t.Errorf("read fail: %s", err)
+		return
+	}
+	if v.Foo != "bar" {
+		t.Errorf("read fail: %s", v.Foo)
+	}
 }

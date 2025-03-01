@@ -6,9 +6,10 @@
 package content
 
 import (
-	"encoding/json"
 	"encoding/xml"
 	"net/http"
+
+	sonicencoder "github.com/bytedance/sonic/encoder"
 
 	"github.com/lattn/neo"
 )
@@ -67,7 +68,7 @@ func (w *JSONDataWriter) SetHeader(res http.ResponseWriter) {
 }
 
 func (w *JSONDataWriter) Write(res http.ResponseWriter, data interface{}) (err error) {
-	enc := json.NewEncoder(res)
+	enc := sonicencoder.NewStreamEncoder(res)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(data)
 }

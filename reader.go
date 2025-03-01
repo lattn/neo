@@ -2,12 +2,13 @@ package neo
 
 import (
 	"encoding"
-	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"net/http"
 	"reflect"
 	"strconv"
+
+	sonicdecoder "github.com/bytedance/sonic/decoder"
 )
 
 // MIME types used when doing request data reading and response data writing.
@@ -49,7 +50,7 @@ var (
 type JSONDataReader struct{}
 
 func (r *JSONDataReader) Read(req *http.Request, data interface{}) error {
-	return json.NewDecoder(req.Body).Decode(data)
+	return sonicdecoder.NewStreamDecoder(req.Body).Decode(data)
 }
 
 // XMLDataReader reads the request body as XML-formatted data.
@@ -228,4 +229,12 @@ func indirect(v reflect.Value) reflect.Value {
 		v = v.Elem()
 	}
 	return v
+}
+
+func Read[T any](c *Context) (T, error) {
+	var t T
+	if err := c.Read(&t); err != nil {
+		return t, err
+	}
+	return t, nil
 }
