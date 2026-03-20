@@ -97,3 +97,8 @@ func (r *LogResponseWriter) WriteHeader(status int) {
 	r.Status = status
 	r.ResponseWriter.WriteHeader(status)
 }
+
+// Unwrap returns the original http.ResponseWriter object wrapped by LogResponseWriter.
+func (r *LogResponseWriter) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
+}
