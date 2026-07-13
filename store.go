@@ -37,7 +37,15 @@ func newStore() *store {
 // The number of parameters in the key is returned.
 func (s *store) Add(key string, data interface{}) int {
 	s.count++
-	return s.root.add(key, data, s.count)
+	return s.root.add(key, data, s.count, nil)
+}
+
+// AddOrMerge adds a new data item with the given parametric key, or merges it into
+// the existing data when the same key already exists.
+// The number of parameters in the key is returned.
+func (s *store) AddOrMerge(key string, data interface{}, merge func(existing, data interface{}) interface{}) int {
+	s.count++
+	return s.root.add(key, data, s.count, merge)
 }
 
 // Get returns the data item matching the given concrete key.
@@ -46,6 +54,11 @@ func (s *store) Add(key string, data interface{}) int {
 func (s *store) Get(path string, pvalues []string) (data interface{}, pnames []string) {
 	data, pnames, _ = s.root.get(path, pvalues)
 	return
+}
+
+// MatchAll invokes fn for every data item whose parametric key matches the given concrete key.
+func (s *store) MatchAll(path string, fn func(data interface{})) {
+	s.root.matchAll(path, fn)
 }
 
 // String dumps the radix tree kept in the store as a string.
@@ -73,7 +86,7 @@ type node struct {
 
 // add adds a new data item to the tree rooted at the current node.
 // The number of parameters in the key is returned.
-func (n *node) add(key string, data interface{}, order int) int {
+func (n *node) add(key string, data interface{}, order int, merge func(existing, data interface{}) interface{}) int {
 	matched := 0
 
 	// find the common prefix
@@ -90,6 +103,8 @@ func (n *node) add(key string, data interface{}, order int) int {
 			if n.data == nil {
 				n.data = data
 				n.order = order
+			} else if merge != nil {
+				n.data = merge(n.data, data)
 			}
 			return n.pindex + 1
 		}
@@ -99,18 +114,18 @@ func (n *node) add(key string, data interface{}, order int) int {
 
 		// try adding to a static child
 		if child := n.children[newKey[0]]; child != nil {
-			if pn := child.add(newKey, data, order); pn >= 0 {
+			if pn := child.add(newKey, data, order, merge); pn >= 0 {
 				return pn
 			}
 		}
 		// try adding to a param child
 		for _, child := range n.pchildren {
-			if pn := child.add(newKey, data, order); pn >= 0 {
+			if pn := child.add(newKey, data, order, merge); pn >= 0 {
 				return pn
 			}
 		}
 
-		return n.addChild(newKey, data, order)
+		return n.addChild(newKey, data, order, merge)
 	}
 
 	if matched == 0 || !n.static {
@@ -137,11 +152,11 @@ func (n *node) add(key string, data interface{}, order int) int {
 	n.children = make([]*node, 256)
 	n.children[n1.key[0]] = n1
 
-	return n.add(key, data, order)
+	return n.add(key, data, order, merge)
 }
 
 // addChild creates static and param nodes to store the given data
-func (n *node) addChild(key string, data interface{}, order int) int {
+func (n *node) addChild(key string, data interface{}, order int, merge func(existing, data interface{}) interface{}) int {
 	// find the first occurrence of a param token
 	p0, p1 := -1, -1
 	for i := 0; i < len(key); i++ {
@@ -216,7 +231,7 @@ func (n *node) addChild(key string, data interface{}, order int) int {
 	}
 
 	// process the rest of the key
-	return child.addChild(key[p1+1:], data, order)
+	return child.addChild(key[p1+1:], data, order, merge)
 }
 
 // get returns the data item with the key matching the tree rooted at the current node
@@ -301,6 +316,53 @@ repeat:
 	}
 
 	return
+}
+
+// matchAll invokes fn for every data item with a key matching the tree rooted at the current node.
+func (n *node) matchAll(key string, fn func(data interface{})) {
+	if n.static {
+		nkl := len(n.key)
+		if nkl > len(key) {
+			return
+		}
+		for i := nkl - 1; i >= 0; i-- {
+			if n.key[i] != key[i] {
+				return
+			}
+		}
+		key = key[nkl:]
+	} else if n.regex != nil {
+		if n.regex.String() == "^.*" {
+			key = ""
+		} else if match := n.regex.FindStringIndex(key); match != nil {
+			key = key[match[1]:]
+		} else {
+			return
+		}
+	} else {
+		i, kl := 0, len(key)
+		for ; i < kl; i++ {
+			if key[i] == '/' {
+				key = key[i:]
+				break
+			}
+		}
+		if i == kl {
+			key = ""
+		}
+	}
+
+	if len(key) > 0 {
+		if child := n.children[key[0]]; child != nil {
+			child.matchAll(key, fn)
+		}
+	} else if n.data != nil {
+		fn(n.data)
+	}
+
+	for _, child := range n.pchildren {
+		child.matchAll(key, fn)
+	}
 }
 
 func (n *node) print(level int) string {

@@ -230,6 +230,7 @@ func (c *Context) init(response http.ResponseWriter, request *http.Request) {
 	c.data = nil
 	c.index = -1
 	c.writer = DefaultDataWriter
+	c.pnames = nil
 }
 
 func getContentType(req *http.Request) string {

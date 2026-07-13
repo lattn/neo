@@ -50,6 +50,12 @@ func TestRouterNotFound(t *testing.T) {
 	r.ServeHTTP(res, req)
 	assert.Equal(t, "ok", res.Body.String(), "response body")
 	assert.Equal(t, http.StatusOK, res.Code, "HTTP status code")
+
+	res = httptest.NewRecorder()
+	req, _ = http.NewRequest("PUT", "/users/", nil)
+	r.ServeHTTP(res, req)
+	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, http.StatusMethodNotAllowed, res.Code, "HTTP status code")
 }
 
 func TestRouterUse(t *testing.T) {
@@ -80,6 +86,19 @@ func TestRouterFind(t *testing.T) {
 	assert.Equal(t, 1, len(handlers))
 	if assert.Equal(t, 1, len(params)) {
 		assert.Equal(t, "1", params["id"])
+	}
+}
+
+func TestRouterFindAllowedMethods(t *testing.T) {
+	r := New()
+	r.Get("/users/<id>", NotFoundHandler)
+	r.Post("/users/<name:\\d+>", NotFoundHandler)
+
+	methods := r.findAllowedMethods("/users/123")
+	if assert.NotNil(t, methods) {
+		assert.True(t, methods["GET"])
+		assert.True(t, methods["POST"])
+		assert.False(t, methods["DELETE"])
 	}
 }
 

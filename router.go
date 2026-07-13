@@ -27,6 +27,7 @@ type (
 		pool                sync.Pool
 		routes              []*Route
 		namedRoutes         map[string]*Route
+		allowStore          *store
 		stores              map[string]routeStore
 		maxParams           int
 		notFound            []Handler
@@ -57,10 +58,52 @@ var Methods = []string{
 	"TRACE",
 }
 
+const (
+	methodBitConnect uint16 = 1 << iota
+	methodBitDelete
+	methodBitGet
+	methodBitHead
+	methodBitOptions
+	methodBitPatch
+	methodBitPost
+	methodBitPut
+	methodBitTrace
+)
+
+func methodBit(method string) uint16 {
+	switch method {
+	case "CONNECT":
+		return methodBitConnect
+	case "DELETE":
+		return methodBitDelete
+	case "GET":
+		return methodBitGet
+	case "HEAD":
+		return methodBitHead
+	case "OPTIONS":
+		return methodBitOptions
+	case "PATCH":
+		return methodBitPatch
+	case "POST":
+		return methodBitPost
+	case "PUT":
+		return methodBitPut
+	case "TRACE":
+		return methodBitTrace
+	default:
+		return 0
+	}
+}
+
+func mergeMethodBits(existing, data interface{}) interface{} {
+	return existing.(uint16) | data.(uint16)
+}
+
 // New creates a new Router object.
 func New() *Router {
 	r := &Router{
 		namedRoutes: make(map[string]*Route),
+		allowStore:  newStore(),
 		stores:      make(map[string]routeStore),
 		catchAll:    radix.New(),
 	}
@@ -79,14 +122,26 @@ func New() *Router {
 // It is required by http.Handler
 func (r *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	c := r.pool.Get().(*Context)
-	c.init(res, req)
-	if r.UseEscapedPath {
-		c.handlers, c.pnames = r.find(req.Method, r.normalizeRequestPath(req.URL.EscapedPath()), c.pvalues)
-		for i, v := range c.pvalues {
-			c.pvalues[i], _ = url.QueryUnescape(v)
-		}
+	if cap(c.pvalues) < r.maxParams {
+		c.pvalues = make([]string, r.maxParams)
 	} else {
-		c.handlers, c.pnames = r.find(req.Method, r.normalizeRequestPath(req.URL.Path), c.pvalues)
+		c.pvalues = c.pvalues[:r.maxParams]
+	}
+	c.init(res, req)
+
+	path := req.URL.Path
+	if r.UseEscapedPath {
+		path = req.URL.EscapedPath()
+	}
+
+	c.handlers, c.pnames = r.find(req.Method, r.normalizeRequestPath(path), c.pvalues)
+	if r.UseEscapedPath {
+		for i := 0; i < len(c.pnames); i++ {
+			v := c.pvalues[i]
+			if strings.IndexByte(v, '%') >= 0 || strings.IndexByte(v, '+') >= 0 {
+				c.pvalues[i], _ = url.QueryUnescape(v)
+			}
+		}
 	}
 	if err := c.Next(); err != nil {
 		r.handleError(c, err)
@@ -157,6 +212,9 @@ func (r *Router) addRoute(route *Route, handlers []Handler) {
 	if n := store.Add(path, handlers); n > r.maxParams {
 		r.maxParams = n
 	}
+	if n := r.allowStore.AddOrMerge(path, methodBit(route.method), mergeMethodBits); n > r.maxParams {
+		r.maxParams = n
+	}
 }
 
 func (r *Router) find(method, path string, pvalues []string) (handlers []Handler, pnames []string) {
@@ -177,11 +235,18 @@ func (r *Router) find(method, path string, pvalues []string) (handlers []Handler
 }
 
 func (r *Router) findAllowedMethods(path string) map[string]bool {
-	methods := make(map[string]bool)
-	pvalues := make([]string, r.maxParams)
-	for m, store := range r.stores {
-		if handlers, _ := store.Get(path, pvalues); handlers != nil {
-			methods[m] = true
+	var bits uint16
+	r.allowStore.MatchAll(path, func(data interface{}) {
+		bits |= data.(uint16)
+	})
+	if bits == 0 {
+		return nil
+	}
+
+	methods := make(map[string]bool, len(Methods))
+	for _, method := range Methods {
+		if bits&methodBit(method) != 0 {
+			methods[method] = true
 		}
 	}
 	return methods
@@ -192,15 +257,17 @@ func (r *Router) FindAllowedMethods(path string) map[string]bool {
 }
 
 func (r *Router) normalizeRequestPath(path string) string {
-	if r.IgnoreTrailingSlash && len(path) > 1 && path[len(path)-1] == '/' {
-		for i := len(path) - 2; i > 0; i-- {
-			if path[i] != '/' {
-				return path[0 : i+1]
-			}
-		}
-		return path[0:1]
+	if !r.IgnoreTrailingSlash || len(path) <= 1 || path[len(path)-1] != '/' {
+		return path
 	}
-	return path
+	i := len(path) - 1
+	for i > 0 && path[i] == '/' {
+		i--
+	}
+	if i == 0 {
+		return path[:1]
+	}
+	return path[:i+1]
 }
 
 // NotFoundHandler returns a 404 HTTP error indicating a request has no matching route.
@@ -212,7 +279,13 @@ func NotFoundHandler(*Context) error {
 // In this case, the handler will respond with an Allow HTTP header listing the allowed HTTP methods.
 // Otherwise, the handler will do nothing and let the next handler (usually a NotFoundHandler) to handle the problem.
 func MethodNotAllowedHandler(c *Context) error {
-	methods := c.Router().findAllowedMethods(c.Request.URL.Path)
+	path := c.Request.URL.Path
+	if c.Router().UseEscapedPath {
+		path = c.Request.URL.EscapedPath()
+	}
+	path = c.Router().normalizeRequestPath(path)
+
+	methods := c.Router().findAllowedMethods(path)
 	if len(methods) == 0 {
 		return nil
 	}
@@ -224,7 +297,7 @@ func MethodNotAllowedHandler(c *Context) error {
 		i++
 	}
 	sort.Strings(ms)
-	c.Response.Header().Set("Allow", strings.Join(ms, ", "))
+	c.Response.Header().Set(HeaderAllow, strings.Join(ms, ", "))
 	if c.Request.Method != "OPTIONS" {
 		c.Response.WriteHeader(http.StatusMethodNotAllowed)
 	}

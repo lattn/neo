@@ -28,7 +28,10 @@ func Formater[T any](fn DataFormater[T]) OptionFunc[T] {
 }
 
 func jsonFormat[T any](w io.Writer, v T) error {
-	enc := encoder.NewStreamEncoder(w)
-	enc.SetNoEncoderNewline(true)
-	return enc.Encode(v)
+	data, err := encoder.Encode(v, encoder.NoEncoderNewline)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
