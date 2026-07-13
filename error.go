@@ -6,7 +6,12 @@ package neo
 
 import "net/http"
 
-var defaultNotFoundHTTPError = NewHTTPError(http.StatusNotFound)
+var (
+	defaultNotFoundHTTPError          = NewHTTPError(http.StatusNotFound)
+	defaultNotFoundHTTPErrorBody      = []byte(http.StatusText(http.StatusNotFound) + "\n")
+	defaultNotFoundContentTypeHeader  = []string{MIMETextPlainCharsetUTF8}
+	defaultNotFoundNoSniffHeaderValue = []string{"nosniff"}
+)
 
 // HTTPError represents an HTTP error with HTTP status code and error message
 type HTTPError interface {

@@ -157,6 +157,32 @@ func TestRouterHandleError(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code)
 }
 
+func TestRouterHandleErrorDefaultNotFound(t *testing.T) {
+	r := New()
+	res := httptest.NewRecorder()
+	res.Header().Set(HeaderContentLength, "123")
+	c := &Context{Response: res}
+
+	r.handleError(c, defaultNotFoundHTTPError)
+
+	assert.Equal(t, http.StatusNotFound, res.Code)
+	assert.Equal(t, "Not Found\n", res.Body.String())
+	assert.Equal(t, MIMETextPlainCharsetUTF8, res.Header().Get(HeaderContentType))
+	assert.Equal(t, "nosniff", res.Header().Get(HeaderXContentTypeOptions))
+	assert.Equal(t, "", res.Header().Get(HeaderContentLength))
+}
+
+func TestRouterHandleErrorCustomNotFound(t *testing.T) {
+	r := New()
+	res := httptest.NewRecorder()
+	c := &Context{Response: res}
+
+	r.handleError(c, NewHTTPError(http.StatusNotFound, "custom not found"))
+
+	assert.Equal(t, http.StatusNotFound, res.Code)
+	assert.Equal(t, "custom not found\n", res.Body.String())
+}
+
 func TestHTTPHandler(t *testing.T) {
 	res := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/users/", nil)

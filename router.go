@@ -214,11 +214,24 @@ func (r *Router) Find(method, path string) (handlers []Handler, params map[strin
 
 // handleError is the error handler for handling any unhandled errors.
 func (r *Router) handleError(c *Context, err error) {
+	if err == defaultNotFoundHTTPError {
+		writeDefaultNotFound(c.Response)
+		return
+	}
 	if httpError, ok := err.(HTTPError); ok {
 		http.Error(c.Response, httpError.Error(), httpError.StatusCode())
 	} else {
 		http.Error(c.Response, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func writeDefaultNotFound(w http.ResponseWriter) {
+	h := w.Header()
+	delete(h, HeaderContentLength)
+	h[HeaderContentType] = defaultNotFoundContentTypeHeader
+	h[HeaderXContentTypeOptions] = defaultNotFoundNoSniffHeaderValue
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write(defaultNotFoundHTTPErrorBody)
 }
 
 func (r *Router) addRoute(route *Route, handlers []Handler) {
