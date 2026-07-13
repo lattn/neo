@@ -100,6 +100,18 @@ func BenchmarkRouterServeHTTPMethodNotAllowed(b *testing.B) {
 	benchmarkServeHTTP(b, r, http.MethodPatch, "/users/123")
 }
 
+func BenchmarkRouterServeHTTPMethodNotAllowedParamOnly(b *testing.B) {
+	r := New()
+	r.Get("/users/<id>", benchmarkHandler)
+	r.Post("/users/<id>", benchmarkHandler)
+	benchmarkServeHTTP(b, r, http.MethodPut, "/users/123")
+}
+
+func BenchmarkRouterServeHTTPNotFoundNearMiss(b *testing.B) {
+	r := newBenchmarkRouter()
+	benchmarkServeHTTP(b, r, http.MethodGet, "/users/123/profile/extra")
+}
+
 func BenchmarkRouterServeHTTPEscapedPath(b *testing.B) {
 	r := newBenchmarkRouter()
 	r.UseEscapedPath = true

@@ -8,7 +8,6 @@ package neo
 import (
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"sync"
 
@@ -68,7 +67,35 @@ const (
 	methodBitPost
 	methodBitPut
 	methodBitTrace
+	allowHeaderTableSize = 1 << 9
 )
+
+var allowHeaders = buildAllowHeaders()
+
+func buildAllowHeaders() [allowHeaderTableSize]string {
+	var headers [allowHeaderTableSize]string
+	for mask := 0; mask < len(headers); mask++ {
+		headers[mask] = buildAllowHeader(uint16(mask))
+	}
+	return headers
+}
+
+func buildAllowHeader(bits uint16) string {
+	if bits == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for _, method := range Methods {
+		if bits&methodBit(method) == 0 {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(method)
+	}
+	return b.String()
+}
 
 func methodBit(method string) uint16 {
 	switch method {
@@ -133,8 +160,9 @@ func (r *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	if r.UseEscapedPath {
 		path = req.URL.EscapedPath()
 	}
+	path = r.normalizeRequestPath(path)
 
-	c.handlers, c.pnames = r.find(req.Method, r.normalizeRequestPath(path), c.pvalues)
+	c.handlers, c.pnames, c.allow = r.find(req.Method, path, c.pvalues)
 	if r.UseEscapedPath {
 		for i := 0; i < len(c.pnames); i++ {
 			v := c.pvalues[i]
@@ -176,7 +204,7 @@ func (r *Router) NotFound(handlers ...Handler) {
 // Find determines the handlers and parameters to use for a specified method and path.
 func (r *Router) Find(method, path string) (handlers []Handler, params map[string]string) {
 	pvalues := make([]string, r.maxParams)
-	handlers, pnames := r.find(method, path, pvalues)
+	handlers, pnames, _ := r.find(method, path, pvalues)
 	params = make(map[string]string, len(pnames))
 	for i, n := range pnames {
 		params[n] = pvalues[i]
@@ -217,28 +245,41 @@ func (r *Router) addRoute(route *Route, handlers []Handler) {
 	}
 }
 
-func (r *Router) find(method, path string, pvalues []string) (handlers []Handler, pnames []string) {
+func (r *Router) find(method, path string, pvalues []string) (handlers []Handler, pnames []string, allow string) {
 	var hh interface{}
 	if store := r.stores[method]; store != nil {
 		hh, pnames = store.Get(path, pvalues)
 	}
 	if hh != nil {
-		return hh.([]Handler), pnames
+		return hh.([]Handler), pnames, ""
 	}
 
 	_, hh, ok := r.catchAll.LongestPrefix(path)
 	if ok {
-		return hh.([]Handler), pnames
+		return hh.([]Handler), pnames, ""
 	}
 
-	return r.notFoundHandlers, pnames
+	return r.notFoundHandlers, pnames, r.findAllowedHeader(path)
 }
 
-func (r *Router) findAllowedMethods(path string) map[string]bool {
+func (r *Router) findAllowedMethodBits(path string) uint16 {
 	var bits uint16
 	r.allowStore.MatchAll(path, func(data interface{}) {
 		bits |= data.(uint16)
 	})
+	return bits
+}
+
+func (r *Router) findAllowedHeader(path string) string {
+	bits := r.findAllowedMethodBits(path)
+	if bits == 0 {
+		return ""
+	}
+	return allowHeaders[int(bits|methodBitOptions)]
+}
+
+func (r *Router) findAllowedMethods(path string) map[string]bool {
+	bits := r.findAllowedMethodBits(path)
 	if bits == 0 {
 		return nil
 	}
@@ -272,32 +313,25 @@ func (r *Router) normalizeRequestPath(path string) string {
 
 // NotFoundHandler returns a 404 HTTP error indicating a request has no matching route.
 func NotFoundHandler(*Context) error {
-	return NewHTTPError(http.StatusNotFound)
+	return defaultNotFoundHTTPError
 }
 
 // MethodNotAllowedHandler handles the situation when a request has matching route without matching HTTP method.
 // In this case, the handler will respond with an Allow HTTP header listing the allowed HTTP methods.
 // Otherwise, the handler will do nothing and let the next handler (usually a NotFoundHandler) to handle the problem.
 func MethodNotAllowedHandler(c *Context) error {
-	path := c.Request.URL.Path
-	if c.Router().UseEscapedPath {
-		path = c.Request.URL.EscapedPath()
+	allow := c.allow
+	if allow == "" && c.Router() != nil && c.Request != nil {
+		path := c.Request.URL.Path
+		if c.Router().UseEscapedPath {
+			path = c.Request.URL.EscapedPath()
+		}
+		allow = c.Router().findAllowedHeader(c.Router().normalizeRequestPath(path))
 	}
-	path = c.Router().normalizeRequestPath(path)
-
-	methods := c.Router().findAllowedMethods(path)
-	if len(methods) == 0 {
+	if allow == "" {
 		return nil
 	}
-	methods["OPTIONS"] = true
-	ms := make([]string, len(methods))
-	i := 0
-	for method := range methods {
-		ms[i] = method
-		i++
-	}
-	sort.Strings(ms)
-	c.Response.Header().Set(HeaderAllow, strings.Join(ms, ", "))
+	c.Response.Header().Set(HeaderAllow, allow)
 	if c.Request.Method != "OPTIONS" {
 		c.Response.WriteHeader(http.StatusMethodNotAllowed)
 	}

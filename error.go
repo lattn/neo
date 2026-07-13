@@ -6,6 +6,8 @@ package neo
 
 import "net/http"
 
+var defaultNotFoundHTTPError = NewHTTPError(http.StatusNotFound)
+
 // HTTPError represents an HTTP error with HTTP status code and error message
 type HTTPError interface {
 	error

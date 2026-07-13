@@ -102,6 +102,29 @@ func TestRouterFindAllowedMethods(t *testing.T) {
 	}
 }
 
+func TestRouterMethodNotAllowedOnParamRoute(t *testing.T) {
+	r := New()
+	r.Get("/users/<id>", NotFoundHandler)
+	r.Post("/users/<id>", NotFoundHandler)
+
+	res := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/users/123", nil)
+	r.ServeHTTP(res, req)
+	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, http.StatusMethodNotAllowed, res.Code, "HTTP status code")
+}
+
+func TestRouterNotFoundDoesNotSetAllowHeader(t *testing.T) {
+	r := New()
+	r.Get("/users/<id>", NotFoundHandler)
+
+	res := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/users/123/profile", nil)
+	r.ServeHTTP(res, req)
+	assert.Equal(t, "", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, http.StatusNotFound, res.Code, "HTTP status code")
+}
+
 func TestRouterNormalizeRequestPath(t *testing.T) {
 	tests := []struct {
 		path     string
