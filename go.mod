@@ -5,7 +5,6 @@ go 1.25.0
 require (
 	github.com/armon/go-radix v1.0.0
 	github.com/bytedance/sonic v1.15.2
-	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
 	github.com/stretchr/testify v1.10.0
 )
