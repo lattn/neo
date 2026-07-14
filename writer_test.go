@@ -1,6 +1,8 @@
 package neo
 
 import (
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -34,3 +36,23 @@ func TestDefaultDataWriter(t *testing.T) {
 	assert.Nil(t, c.Write("abc"))
 	assert.Equal(t, "abc", res.Body.String())
 }
+
+func TestDefaultDataWriterUsesStringWriter(t *testing.T) {
+	res := &stringWriterRecorder{ResponseRecorder: httptest.NewRecorder()}
+	assert.Nil(t, DefaultDataWriter.Write(res, "abc"))
+	assert.Equal(t, "abc", res.Body.String())
+	assert.Equal(t, "abc", res.written)
+}
+
+type stringWriterRecorder struct {
+	*httptest.ResponseRecorder
+	written string
+}
+
+func (w *stringWriterRecorder) WriteString(s string) (int, error) {
+	w.written = s
+	return w.Body.WriteString(s)
+}
+
+var _ http.ResponseWriter = (*stringWriterRecorder)(nil)
+var _ io.StringWriter = (*stringWriterRecorder)(nil)

@@ -2,6 +2,7 @@ package neo
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 )
 
@@ -22,18 +23,22 @@ type dataWriter struct{}
 func (w *dataWriter) SetHeader(res http.ResponseWriter) {}
 
 func (w *dataWriter) Write(res http.ResponseWriter, data interface{}) error {
-	var bytes []byte
-	switch data.(type) {
+	switch v := data.(type) {
 	case []byte:
-		bytes = data.([]byte)
+		_, err := res.Write(v)
+		return err
 	case string:
-		bytes = []byte(data.(string))
+		if sw, ok := res.(io.StringWriter); ok {
+			_, err := sw.WriteString(v)
+			return err
+		}
+		_, err := res.Write([]byte(v))
+		return err
 	default:
 		if data != nil {
 			_, err := fmt.Fprint(res, data)
 			return err
 		}
+		return nil
 	}
-	_, err := res.Write(bytes)
-	return err
 }
