@@ -79,12 +79,12 @@ func (rg *RouteGroup) Any(path string, handlers ...Handler) *Route {
 // To adds a route to the router with the given HTTP methods, route path, and handlers.
 // Multiple HTTP methods should be separated by commas (without any surrounding spaces).
 func (rg *RouteGroup) To(methods, path string, handlers ...Handler) *Route {
-	mm := strings.Split(methods, ",")
+	mm := parseMethods(methods)
 	if len(mm) == 1 {
-		return rg.add(methods, path, handlers)
+		return rg.add(mm[0], path, handlers)
 	}
 
-	r := rg.newRoute(methods, path)
+	r := rg.newRoute(strings.Join(mm, ","), path)
 	for _, method := range mm {
 		r.routes = append(r.routes, rg.add(method, path, handlers))
 	}
@@ -153,6 +153,27 @@ func combineHandlers(h1 []Handler, h2 []Handler) []Handler {
 	copy(hh, h1)
 	copy(hh[len(h1):], h2)
 	return hh
+}
+
+func parseMethods(methods string) []string {
+	parts := strings.Split(methods, ",")
+	result := make([]string, 0, len(parts))
+	seen := make(map[string]struct{}, len(parts))
+	for _, method := range parts {
+		method = strings.TrimSpace(method)
+		if method == "" || methodBit(method) == 0 {
+			continue
+		}
+		if _, ok := seen[method]; ok {
+			continue
+		}
+		seen[method] = struct{}{}
+		result = append(result, method)
+	}
+	if len(result) == 0 {
+		return []string{methods}
+	}
+	return result
 }
 
 // buildURLTemplate converts a route pattern into a URL template by removing regular expressions in parameter tokens.

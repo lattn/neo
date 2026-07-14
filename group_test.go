@@ -31,6 +31,10 @@ func TestRouteGroupTo(t *testing.T) {
 	group.To("GET,POST", "/comments")
 	assert.Equal(t, 3, router.stores["GET"].(*mockStore).count, "router.stores[GET].count@3 =")
 	assert.Equal(t, 2, router.stores["POST"].(*mockStore).count, "router.stores[POST].count@3 =")
+
+	group.To(" GET, POST,GET , INVALID ", "/spaces")
+	assert.Equal(t, 4, router.stores["GET"].(*mockStore).count, "router.stores[GET].count@4 =")
+	assert.Equal(t, 3, router.stores["POST"].(*mockStore).count, "router.stores[POST].count@4 =")
 }
 
 func TestRouteGroupMethods(t *testing.T) {

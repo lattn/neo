@@ -293,23 +293,37 @@ func (r *Router) findAllowedHeader(path string) string {
 	return allowHeaders[int(bits|methodBitOptions)]
 }
 
+func methodsFromBits(bits uint16) []string {
+	if bits == 0 {
+		return nil
+	}
+	methods := make([]string, 0, len(Methods))
+	for _, method := range Methods {
+		if bits&methodBit(method) != 0 {
+			methods = append(methods, method)
+		}
+	}
+	return methods
+}
+
 func (r *Router) findAllowedMethods(path string) map[string]bool {
 	bits := r.findAllowedMethodBits(path)
 	if bits == 0 {
 		return nil
 	}
-
 	methods := make(map[string]bool, len(Methods))
-	for _, method := range Methods {
-		if bits&methodBit(method) != 0 {
-			methods[method] = true
-		}
+	for _, method := range methodsFromBits(bits) {
+		methods[method] = true
 	}
 	return methods
 }
 
 func (r *Router) FindAllowedMethods(path string) map[string]bool {
 	return r.findAllowedMethods(path)
+}
+
+func (r *Router) FindAllowedMethodList(path string) []string {
+	return methodsFromBits(r.findAllowedMethodBits(path))
 }
 
 func (r *Router) normalizeRequestPath(path string) string {

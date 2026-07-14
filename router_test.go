@@ -100,6 +100,9 @@ func TestRouterFindAllowedMethods(t *testing.T) {
 		assert.True(t, methods["POST"])
 		assert.False(t, methods["DELETE"])
 	}
+
+	assert.Equal(t, []string{"GET", "POST"}, r.FindAllowedMethodList("/users/123"))
+	assert.Nil(t, r.FindAllowedMethodList("/users/abc/profile"))
 }
 
 func TestRouterMethodNotAllowedOnParamRoute(t *testing.T) {
