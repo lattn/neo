@@ -6,6 +6,7 @@
 package fault
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/lattn/neo"
@@ -56,10 +57,11 @@ func ErrorHandler(logf LogFunc, errorf ...ConvertErrorFunc) neo.Handler {
 // If the error implements HTTPError, it will set the HTTP status as the result of the StatusCode() call of the error.
 // Otherwise, the HTTP status will be set as http.StatusInternalServerError.
 func writeError(c *neo.Context, err error) {
-	if httpError, ok := err.(neo.HTTPError); ok {
+	var httpError neo.HTTPError
+	if errors.As(err, &httpError) {
 		c.Response.WriteHeader(httpError.StatusCode())
 	} else {
 		c.Response.WriteHeader(http.StatusInternalServerError)
 	}
-	c.Write(err)
+	_ = c.Write(err)
 }

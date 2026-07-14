@@ -50,7 +50,7 @@ func getCallStack(skip int) string {
 		if !ok {
 			break
 		}
-		fmt.Fprintf(buf, "\n%s:%d", file, line)
+		_, _ = fmt.Fprintf(buf, "\n%s:%d", file, line)
 	}
 	return buf.String()
 }

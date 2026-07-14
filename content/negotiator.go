@@ -34,7 +34,7 @@ func (a AcceptRange) RawString() string {
 
 // AcceptMediaTypes builds a list of AcceptRange from the given HTTP request.
 func AcceptMediaTypes(r *http.Request) []AcceptRange {
-	result := []AcceptRange{}
+	var result []AcceptRange
 
 	for _, v := range r.Header["Accept"] {
 		result = append(result, ParseAcceptRanges(v)...)
@@ -45,7 +45,7 @@ func AcceptMediaTypes(r *http.Request) []AcceptRange {
 
 // ParseAcceptRanges parses an Accept header into a list of AcceptRange
 func ParseAcceptRanges(accepts string) []AcceptRange {
-	result := []AcceptRange{}
+	var result []AcceptRange
 	remaining := accepts
 	for {
 		var accept string

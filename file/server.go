@@ -100,7 +100,9 @@ func Server(pathMap PathMap, opts ...ServerOptions) neo.Handler {
 			}
 			return neo.NewHTTPError(http.StatusNotFound, err.Error())
 		}
-		defer file.Close()
+		defer func() {
+			_ = file.Close()
+		}()
 
 		if fstat, err = file.Stat(); err != nil {
 			return neo.NewHTTPError(http.StatusNotFound, err.Error())
@@ -124,7 +126,9 @@ func serveFile(c *neo.Context, dir http.Dir, path string) error {
 	if err != nil {
 		return neo.NewHTTPError(http.StatusNotFound, err.Error())
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	fstat, err := file.Stat()
 	if err != nil {
 		return neo.NewHTTPError(http.StatusNotFound, err.Error())
@@ -152,7 +156,9 @@ func Content(path string) neo.Handler {
 		if err != nil {
 			return neo.NewHTTPError(http.StatusNotFound, err.Error())
 		}
-		defer file.Close()
+		defer func() {
+			_ = file.Close()
+		}()
 		fstat, err := file.Stat()
 		if err != nil {
 			return neo.NewHTTPError(http.StatusNotFound, err.Error())

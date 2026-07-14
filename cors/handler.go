@@ -141,7 +141,7 @@ func (o *Options) isPreflightAllowed(origin, method, reqHeaders string) (allowed
 		return true, reqHeaders
 	}
 
-	headers := []string{}
+	var headers []string
 	for _, header := range strings.Split(reqHeaders, ",") {
 		header = strings.TrimSpace(header)
 		if o.allowHeaderMap[strings.ToUpper(header)] {
