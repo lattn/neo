@@ -125,6 +125,42 @@ func TestRouterNotFoundDoesNotSetAllowHeader(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code, "HTTP status code")
 }
 
+func TestRouterUseEscapedPathPlusSign(t *testing.T) {
+	r := New()
+	r.UseEscapedPath = true
+
+	var value string
+	r.Get("/files/<name>", func(c *Context) error {
+		value = c.Param("name")
+		return nil
+	})
+
+	res := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/files/a+b", nil)
+	r.ServeHTTP(res, req)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, "a+b", value)
+}
+
+func TestRouterUseEscapedPathSlash(t *testing.T) {
+	r := New()
+	r.UseEscapedPath = true
+
+	var value string
+	r.Get("/files/<name>", func(c *Context) error {
+		value = c.Param("name")
+		return nil
+	})
+
+	res := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/files/a%2Fb", nil)
+	r.ServeHTTP(res, req)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, "a/b", value)
+}
+
 func TestRouterNormalizeRequestPath(t *testing.T) {
 	tests := []struct {
 		path     string

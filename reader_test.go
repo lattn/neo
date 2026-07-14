@@ -2,6 +2,7 @@ package neo
 
 import (
 	"bytes"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
@@ -125,4 +126,21 @@ func TestRead(t *testing.T) {
 	if v.Foo != "bar" {
 		t.Errorf("read fail: %s", v.Foo)
 	}
+}
+
+func TestFormDataReaderMultipart(t *testing.T) {
+	var data FA
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	assert.NoError(t, writer.WriteField("A1", "abc"))
+	assert.NoError(t, writer.WriteField("A2", "100"))
+	assert.NoError(t, writer.Close())
+
+	req, _ := http.NewRequest(http.MethodPost, "/test", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	c := NewContext(nil, req)
+	err := c.Read(&data)
+	assert.NoError(t, err)
+	assert.Equal(t, FA{A1: "abc", A2: 100}, data)
 }

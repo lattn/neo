@@ -66,6 +66,8 @@ func TestRouteURL(t *testing.T) {
 	assert.Equal(t, "/admin/users/123/profile/", r.URL("id", 123, "action", "profile", ""))
 	assert.Equal(t, "/admin/users/123/profile/", r.URL("id", 123, "action", "profile", "", "xyz/abc"))
 	assert.Equal(t, "/admin/users/123/a%2C%3C%3E%3F%23/", r.URL("id", 123, "action", "a,<>?#"))
+	assert.Equal(t, "/admin/users/123/a%20b/", r.URL("id", 123, "action", "a b"))
+	assert.Equal(t, "/admin/users/123/a+b/", r.URL("id", 123, "action", "a+b"))
 }
 
 func newHandler(tag string, buf *bytes.Buffer) Handler {

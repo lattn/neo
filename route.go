@@ -124,7 +124,7 @@ func (r *Route) URL(pairs ...interface{}) (s string) {
 		name := fmt.Sprintf("<%v>", pairs[i])
 		value := ""
 		if i < len(pairs)-1 {
-			value = url.QueryEscape(fmt.Sprint(pairs[i+1]))
+			value = url.PathEscape(fmt.Sprint(pairs[i+1]))
 		}
 		s = strings.Replace(s, name, value, -1)
 	}

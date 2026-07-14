@@ -167,8 +167,8 @@ func (r *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	if r.UseEscapedPath {
 		for i := 0; i < len(c.pnames); i++ {
 			v := c.pvalues[i]
-			if strings.IndexByte(v, '%') >= 0 || strings.IndexByte(v, '+') >= 0 {
-				c.pvalues[i], _ = url.QueryUnescape(v)
+			if strings.IndexByte(v, '%') >= 0 {
+				c.pvalues[i], _ = url.PathUnescape(v)
 			}
 		}
 	}

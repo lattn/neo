@@ -8,6 +8,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -15,13 +16,14 @@ import (
 type Context struct {
 	Request  *http.Request       // the current request
 	Response http.ResponseWriter // the response writer
-	router   *Router
-	pnames   []string               // list of route parameter names
-	pvalues  []string               // list of parameter values corresponding to pnames
-	data     map[string]interface{} // data items managed by Get and Set
-	index    int                    // the index of the currently executing handler in handlers
-	handlers []Handler              // the handlers associated with the current route
-	writer   DataWriter
+	router      *Router
+	pnames      []string               // list of route parameter names
+	pvalues     []string               // list of parameter values corresponding to pnames
+	queryValues url.Values             // cached query values
+	data        map[string]interface{} // data items managed by Get and Set
+	index       int                    // the index of the currently executing handler in handlers
+	handlers    []Handler              // the handlers associated with the current route
+	writer      DataWriter
 }
 
 // NewContext creates a new Context object with the given response, request, and the handlers.
@@ -88,7 +90,10 @@ func (c *Context) Set(name string, value interface{}) {
 // Query returns the first value for the named component of the URL query parameters.
 // If key is not present, it returns the specified default value or an empty string.
 func (c *Context) Query(name string, defaultValue ...string) string {
-	if vs, _ := c.Request.URL.Query()[name]; len(vs) > 0 {
+	if c.queryValues == nil {
+		c.queryValues = c.Request.URL.Query()
+	}
+	if vs := c.queryValues[name]; len(vs) > 0 {
 		return vs[0]
 	}
 	if len(defaultValue) > 0 {
@@ -103,7 +108,7 @@ func (c *Context) Query(name string, defaultValue ...string) string {
 // If key is not present, it returns the specified default value or an empty string.
 func (c *Context) Form(key string, defaultValue ...string) string {
 	r := c.Request
-	_ = r.ParseMultipartForm(32 << 20)
+	parseRequestForm(r)
 	if vs := r.Form[key]; len(vs) > 0 {
 		return vs[0]
 	}
@@ -118,7 +123,7 @@ func (c *Context) Form(key string, defaultValue ...string) string {
 // If key is not present, it returns the specified default value or an empty string.
 func (c *Context) PostForm(key string, defaultValue ...string) string {
 	r := c.Request
-	_ = r.ParseMultipartForm(32 << 20)
+	parseRequestForm(r)
 	if vs := r.PostForm[key]; len(vs) > 0 {
 		return vs[0]
 	}
@@ -227,10 +232,19 @@ func (c *Context) Context() context.Context {
 func (c *Context) init(response http.ResponseWriter, request *http.Request) {
 	c.Response = response
 	c.Request = request
+	c.queryValues = nil
 	c.data = nil
 	c.index = -1
 	c.writer = DefaultDataWriter
 	c.pnames = nil
+}
+
+func parseRequestForm(req *http.Request) {
+	if getContentType(req) == MIME_MULTIPART_FORM {
+		_ = req.ParseMultipartForm(32 << 20)
+		return
+	}
+	_ = req.ParseForm()
 }
 
 func getContentType(req *http.Request) string {

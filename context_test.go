@@ -1,8 +1,10 @@
 package neo
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -45,10 +47,12 @@ func TestContextInit(t *testing.T) {
 	assert.Nil(t, c.Request)
 	assert.Equal(t, 0, len(c.handlers))
 	req, _ := http.NewRequest("GET", "/users/", nil)
+	c.queryValues = map[string][]string{"stale": {"value"}}
 	c.init(httptest.NewRecorder(), req)
 	assert.NotNil(t, c.Response)
 	assert.NotNil(t, c.Request)
 	assert.Equal(t, -1, c.index)
+	assert.Nil(t, c.queryValues)
 	assert.Nil(t, c.data)
 }
 
@@ -58,6 +62,26 @@ func TestContextURL(t *testing.T) {
 	c := &Context{router: router}
 	assert.Equal(t, "/users/123/address/", c.URL("users", "id", 123, "action", "address"))
 	assert.Equal(t, "", c.URL("abc", "id", 123, "action", "address"))
+}
+
+func TestContextURLRoundTripWithEscapedPath(t *testing.T) {
+	router := New()
+	router.UseEscapedPath = true
+
+	var got string
+	router.Get("/files/<name>", func(c *Context) error {
+		got = c.Param("name")
+		return nil
+	}).Name("files")
+
+	path := router.Route("files").URL("name", "a+b c/d")
+
+	res := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", path, nil)
+	router.ServeHTTP(res, req)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, "a+b c/d", got)
 }
 
 func TestContextGetSet(t *testing.T) {
@@ -86,6 +110,24 @@ func TestContextQueryForm(t *testing.T) {
 	assert.Equal(t, "y", c.Form("both"))
 	assert.Equal(t, "", c.Form("x"))
 	assert.Equal(t, "123", c.Form("x", "123"))
+}
+
+func TestContextMultipartForm(t *testing.T) {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	assert.NoError(t, writer.WriteField("z", "post"))
+	assert.NoError(t, writer.WriteField("empty", ""))
+	assert.NoError(t, writer.Close())
+
+	req, _ := http.NewRequest("POST", "http://www.google.com/search?q=foo&both=x", &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	c := NewContext(nil, req)
+
+	assert.Equal(t, "post", c.PostForm("z"))
+	assert.Equal(t, "", c.PostForm("x"))
+	assert.Equal(t, "123", c.PostForm("x", "123"))
+	assert.Equal(t, "post", c.Form("z"))
+	assert.Equal(t, "", c.Form("empty", "123"))
 }
 
 func TestContextNextAbort(t *testing.T) {

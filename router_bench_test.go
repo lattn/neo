@@ -1,7 +1,9 @@
 package neo
 
 import (
+	"mime/multipart"
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -116,4 +118,64 @@ func BenchmarkRouterServeHTTPEscapedPath(b *testing.B) {
 	r := newBenchmarkRouter()
 	r.UseEscapedPath = true
 	benchmarkServeHTTP(b, r, http.MethodGet, "/files/a%2Fb%2Fc")
+}
+
+func BenchmarkContextQueryRepeated(b *testing.B) {
+	req, err := http.NewRequest(http.MethodGet, "http://example.com/search?q=foo&q=bar&sort=desc&page=2", nil)
+	if err != nil {
+		b.Fatalf("new request: %v", err)
+	}
+	c := NewContext(newBenchmarkResponseWriter(), req)
+	b.ReportAllocs()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = c.Query("q")
+		_ = c.Query("sort")
+		_ = c.Query("page")
+	}
+}
+
+func BenchmarkContextFormURLEncoded(b *testing.B) {
+	body := "z=post&both=y&prio=2&empty="
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		req, err := http.NewRequest(http.MethodPost, "http://example.com/search?q=foo&both=x", strings.NewReader(body))
+		if err != nil {
+			b.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		c := NewContext(newBenchmarkResponseWriter(), req)
+		_ = c.PostForm("z")
+		_ = c.Form("both")
+	}
+}
+
+func BenchmarkContextFormMultipart(b *testing.B) {
+	var body strings.Builder
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("z", "post"); err != nil {
+		b.Fatalf("write field z: %v", err)
+	}
+	if err := writer.WriteField("both", "y"); err != nil {
+		b.Fatalf("write field both: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		b.Fatalf("close writer: %v", err)
+	}
+	contentType := writer.FormDataContentType()
+	payload := body.String()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		req, err := http.NewRequest(http.MethodPost, "http://example.com/search?q=foo&both=x", strings.NewReader(payload))
+		if err != nil {
+			b.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", contentType)
+		c := NewContext(newBenchmarkResponseWriter(), req)
+		_ = c.PostForm("z")
+		_ = c.Form("both")
+	}
 }

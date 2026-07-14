@@ -63,7 +63,7 @@ type FormDataReader struct{}
 
 func (r *FormDataReader) Read(req *http.Request, data interface{}) error {
 	// Do not check return result. Otherwise GET request will cause problem.
-	_ = req.ParseMultipartForm(32 << 20)
+	parseRequestForm(req)
 	return ReadFormData(req.Form, data)
 }
 
