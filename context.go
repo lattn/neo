@@ -21,7 +21,6 @@ type Context struct {
 	data     map[string]interface{} // data items managed by Get and Set
 	index    int                    // the index of the currently executing handler in handlers
 	handlers []Handler              // the handlers associated with the current route
-	allow    string
 	writer   DataWriter
 }
 
@@ -232,7 +231,6 @@ func (c *Context) init(response http.ResponseWriter, request *http.Request) {
 	c.index = -1
 	c.writer = DefaultDataWriter
 	c.pnames = nil
-	c.allow = ""
 }
 
 func getContentType(req *http.Request) string {

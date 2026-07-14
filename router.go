@@ -162,7 +162,7 @@ func (r *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 	path = r.normalizeRequestPath(path)
 
-	c.handlers, c.pnames, c.allow = r.find(req.Method, path, c.pvalues)
+	c.handlers, c.pnames = r.find(req.Method, path, c.pvalues)
 	if r.UseEscapedPath {
 		for i := 0; i < len(c.pnames); i++ {
 			v := c.pvalues[i]
@@ -204,7 +204,7 @@ func (r *Router) NotFound(handlers ...Handler) {
 // Find determines the handlers and parameters to use for a specified method and path.
 func (r *Router) Find(method, path string) (handlers []Handler, params map[string]string) {
 	pvalues := make([]string, r.maxParams)
-	handlers, pnames, _ := r.find(method, path, pvalues)
+	handlers, pnames := r.find(method, path, pvalues)
 	params = make(map[string]string, len(pnames))
 	for i, n := range pnames {
 		params[n] = pvalues[i]
@@ -258,21 +258,21 @@ func (r *Router) addRoute(route *Route, handlers []Handler) {
 	}
 }
 
-func (r *Router) find(method, path string, pvalues []string) (handlers []Handler, pnames []string, allow string) {
+func (r *Router) find(method, path string, pvalues []string) (handlers []Handler, pnames []string) {
 	var hh interface{}
 	if store := r.stores[method]; store != nil {
 		hh, pnames = store.Get(path, pvalues)
 	}
 	if hh != nil {
-		return hh.([]Handler), pnames, ""
+		return hh.([]Handler), pnames
 	}
 
 	_, hh, ok := r.catchAll.LongestPrefix(path)
 	if ok {
-		return hh.([]Handler), pnames, ""
+		return hh.([]Handler), pnames
 	}
 
-	return r.notFoundHandlers, pnames, r.findAllowedHeader(path)
+	return r.notFoundHandlers, pnames
 }
 
 func (r *Router) findAllowedMethodBits(path string) uint16 {
@@ -333,8 +333,8 @@ func NotFoundHandler(*Context) error {
 // In this case, the handler will respond with an Allow HTTP header listing the allowed HTTP methods.
 // Otherwise, the handler will do nothing and let the next handler (usually a NotFoundHandler) to handle the problem.
 func MethodNotAllowedHandler(c *Context) error {
-	allow := c.allow
-	if allow == "" && c.Router() != nil && c.Request != nil {
+	allow := ""
+	if c.Router() != nil && c.Request != nil {
 		path := c.Request.URL.Path
 		if c.Router().UseEscapedPath {
 			path = c.Request.URL.EscapedPath()
