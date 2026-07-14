@@ -54,5 +54,7 @@ func (w *stringWriterRecorder) WriteString(s string) (int, error) {
 	return w.Body.WriteString(s)
 }
 
-var _ http.ResponseWriter = (*stringWriterRecorder)(nil)
-var _ io.StringWriter = (*stringWriterRecorder)(nil)
+var (
+	_ http.ResponseWriter = (*stringWriterRecorder)(nil)
+	_ io.StringWriter     = (*stringWriterRecorder)(nil)
+)

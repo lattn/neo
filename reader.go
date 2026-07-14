@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"reflect"
 	"strconv"
-
-	sonicdecoder "github.com/bytedance/sonic/decoder"
 )
 
 // MIME types used when doing request data reading and response data writing.
@@ -50,7 +48,7 @@ var (
 type JSONDataReader struct{}
 
 func (r *JSONDataReader) Read(req *http.Request, data interface{}) error {
-	return sonicdecoder.NewStreamDecoder(req.Body).Decode(data)
+	return DefaultJSONCodec.DecodeStream(req.Body, data)
 }
 
 // XMLDataReader reads the request body as XML-formatted data.
@@ -65,7 +63,7 @@ type FormDataReader struct{}
 
 func (r *FormDataReader) Read(req *http.Request, data interface{}) error {
 	// Do not check return result. Otherwise GET request will cause problem.
-	req.ParseMultipartForm(32 << 20)
+	_ = req.ParseMultipartForm(32 << 20)
 	return ReadFormData(req.Form, data)
 }
 

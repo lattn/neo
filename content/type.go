@@ -9,8 +9,6 @@ import (
 	"encoding/xml"
 	"net/http"
 
-	sonicencoder "github.com/bytedance/sonic/encoder"
-
 	"github.com/lattn/neo"
 )
 
@@ -68,9 +66,7 @@ func (w *JSONDataWriter) SetHeader(res http.ResponseWriter) {
 }
 
 func (w *JSONDataWriter) Write(res http.ResponseWriter, data interface{}) (err error) {
-	enc := sonicencoder.NewStreamEncoder(res)
-	enc.SetEscapeHTML(false)
-	return enc.Encode(data)
+	return neo.DefaultJSONCodec.EncodeStream(data, res)
 }
 
 // XMLDataWriter sets the "Content-Type" response header as "application/xml; charset=UTF-8" and writes the given data in XML format to the response.

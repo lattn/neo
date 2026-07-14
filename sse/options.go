@@ -3,7 +3,7 @@ package sse
 import (
 	"io"
 
-	"github.com/bytedance/sonic/encoder"
+	"github.com/lattn/neo"
 )
 
 type DataFormater[T any] func(io.Writer, T) error
@@ -28,7 +28,7 @@ func Formater[T any](fn DataFormater[T]) OptionFunc[T] {
 }
 
 func jsonFormat[T any](w io.Writer, v T) error {
-	data, err := encoder.Encode(v, encoder.NoEncoderNewline)
+	data, err := neo.DefaultJSONCodec.Encode(v)
 	if err != nil {
 		return err
 	}
