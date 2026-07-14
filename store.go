@@ -295,23 +295,31 @@ repeat:
 	}
 
 	// try matching param children
-	tvalues := pvalues
-	allocated := false
+	var stackValues [8]string
+	var scratch []string
 	for _, child := range n.pchildren {
 		if child.minOrder >= order {
 			continue
 		}
-		if data != nil && !allocated {
-			tvalues = make([]string, len(pvalues))
-			allocated = true
-		}
-		if d, p, s := child.get(key, tvalues); d != nil && s < order {
-			if allocated {
-				for i := child.pindex; i < len(p); i++ {
-					pvalues[i] = tvalues[i]
-				}
+		start := child.pindex
+		if data != nil {
+			size := len(pvalues) - start
+			switch {
+			case size <= len(stackValues):
+				scratch = stackValues[:size]
+			case len(scratch) < size:
+				scratch = make([]string, size)
+			default:
+				scratch = scratch[:size]
 			}
+			copy(scratch, pvalues[start:])
+		}
+		if d, p, s := child.get(key, pvalues); d != nil && s < order {
 			data, pnames, order = d, p, s
+			continue
+		}
+		if data != nil {
+			copy(pvalues[start:], scratch)
 		}
 	}
 

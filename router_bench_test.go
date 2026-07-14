@@ -109,6 +109,13 @@ func BenchmarkRouterServeHTTPMethodNotAllowedParamOnly(b *testing.B) {
 	benchmarkServeHTTP(b, r, http.MethodPut, "/users/123")
 }
 
+func BenchmarkRouterServeHTTPStaticVsParamSibling(b *testing.B) {
+	r := New()
+	r.Get("/users/profile", benchmarkHandler)
+	r.Get("/users/<id>", benchmarkHandler)
+	benchmarkServeHTTP(b, r, http.MethodGet, "/users/profile")
+}
+
 func BenchmarkRouterServeHTTPNotFoundNearMiss(b *testing.B) {
 	r := newBenchmarkRouter()
 	benchmarkServeHTTP(b, r, http.MethodGet, "/users/123/profile/extra")
