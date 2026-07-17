@@ -3,7 +3,6 @@ module github.com/lattn/neo
 go 1.25.0
 
 require (
-	github.com/armon/go-radix v1.0.0
 	github.com/golang/gddo v0.0.0-20210115222349-20d68f94ee1f
 	github.com/stretchr/testify v1.10.0
 )
