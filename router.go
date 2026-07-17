@@ -2,13 +2,13 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-// Package routing provides high performance and powerful HTTP routing capabilities.
 package neo
 
 import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 
@@ -27,7 +27,6 @@ type (
 		pool                sync.Pool
 		routes              []*Route
 		namedRoutes         map[string]*Route
-		allowStore          *store
 		stores              map[string]routeStore
 		maxParams           int
 		notFound            []Handler
@@ -58,80 +57,10 @@ var Methods = []string{
 	"TRACE",
 }
 
-const (
-	methodBitConnect uint16 = 1 << iota
-	methodBitDelete
-	methodBitGet
-	methodBitHead
-	methodBitOptions
-	methodBitPatch
-	methodBitPost
-	methodBitPut
-	methodBitTrace
-	allowHeaderTableSize = 1 << 9
-)
-
-var allowHeaders = buildAllowHeaders()
-
-func buildAllowHeaders() [allowHeaderTableSize]string {
-	var headers [allowHeaderTableSize]string
-	for mask := 0; mask < len(headers); mask++ {
-		headers[mask] = buildAllowHeader(uint16(mask))
-	}
-	return headers
-}
-
-func buildAllowHeader(bits uint16) string {
-	if bits == 0 {
-		return ""
-	}
-	var b strings.Builder
-	for _, method := range Methods {
-		if bits&methodBit(method) == 0 {
-			continue
-		}
-		if b.Len() > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(method)
-	}
-	return b.String()
-}
-
-func methodBit(method string) uint16 {
-	switch method {
-	case "CONNECT":
-		return methodBitConnect
-	case "DELETE":
-		return methodBitDelete
-	case "GET":
-		return methodBitGet
-	case "HEAD":
-		return methodBitHead
-	case "OPTIONS":
-		return methodBitOptions
-	case "PATCH":
-		return methodBitPatch
-	case "POST":
-		return methodBitPost
-	case "PUT":
-		return methodBitPut
-	case "TRACE":
-		return methodBitTrace
-	default:
-		return 0
-	}
-}
-
-func mergeMethodBits(existing, data interface{}) interface{} {
-	return existing.(uint16) | data.(uint16)
-}
-
 // New creates a new Router object.
 func New() *Router {
 	r := &Router{
 		namedRoutes: make(map[string]*Route),
-		allowStore:  newStore(),
 		stores:      make(map[string]routeStore),
 		catchAll:    radix.New(),
 	}
@@ -255,9 +184,6 @@ func (r *Router) addRoute(route *Route, handlers []Handler) {
 	if n := store.Add(path, handlers); n > r.maxParams {
 		r.maxParams = n
 	}
-	if n := r.allowStore.AddOrMerge(path, methodBit(route.method), mergeMethodBits); n > r.maxParams {
-		r.maxParams = n
-	}
 }
 
 func (r *Router) find(method, path string, pvalues []string) (handlers []Handler, pnames []string) {
@@ -277,53 +203,19 @@ func (r *Router) find(method, path string, pvalues []string) (handlers []Handler
 	return r.notFoundHandlers, pnames
 }
 
-func (r *Router) findAllowedMethodBits(path string) uint16 {
-	var bits uint16
-	r.allowStore.MatchAll(path, func(data interface{}) {
-		bits |= data.(uint16)
-	})
-	return bits
-}
-
-func (r *Router) findAllowedHeader(path string) string {
-	bits := r.findAllowedMethodBits(path)
-	if bits == 0 {
-		return ""
-	}
-	return allowHeaders[int(bits|methodBitOptions)]
-}
-
-func methodsFromBits(bits uint16) []string {
-	if bits == 0 {
-		return nil
-	}
-	methods := make([]string, 0, len(Methods))
-	for _, method := range Methods {
-		if bits&methodBit(method) != 0 {
-			methods = append(methods, method)
-		}
-	}
-	return methods
-}
-
 func (r *Router) findAllowedMethods(path string) map[string]bool {
-	bits := r.findAllowedMethodBits(path)
-	if bits == 0 {
-		return nil
-	}
-	methods := make(map[string]bool, len(Methods))
-	for _, method := range methodsFromBits(bits) {
-		methods[method] = true
+	methods := make(map[string]bool)
+	pvalues := make([]string, r.maxParams)
+	for m, store := range r.stores {
+		if handlers, _ := store.Get(path, pvalues); handlers != nil {
+			methods[m] = true
+		}
 	}
 	return methods
 }
 
 func (r *Router) FindAllowedMethods(path string) map[string]bool {
 	return r.findAllowedMethods(path)
-}
-
-func (r *Router) FindAllowedMethodList(path string) []string {
-	return methodsFromBits(r.findAllowedMethodBits(path))
 }
 
 func (r *Router) normalizeRequestPath(path string) string {
@@ -349,18 +241,23 @@ func NotFoundHandler(*Context) error {
 // In this case, the handler will respond with an Allow HTTP header listing the allowed HTTP methods.
 // Otherwise, the handler will do nothing and let the next handler (usually a NotFoundHandler) to handle the problem.
 func MethodNotAllowedHandler(c *Context) error {
-	allow := ""
-	if c.Router() != nil && c.Request != nil {
-		path := c.Request.URL.Path
-		if c.Router().UseEscapedPath {
-			path = c.Request.URL.EscapedPath()
-		}
-		allow = c.Router().findAllowedHeader(c.Router().normalizeRequestPath(path))
+	path := c.Request.URL.Path
+	if c.Router().UseEscapedPath {
+		path = c.Request.URL.EscapedPath()
 	}
-	if allow == "" {
+	methods := c.Router().findAllowedMethods(c.Router().normalizeRequestPath(path))
+	if len(methods) == 0 {
 		return nil
 	}
-	c.Response.Header().Set(HeaderAllow, allow)
+	methods["OPTIONS"] = true
+	ms := make([]string, len(methods))
+	i := 0
+	for method := range methods {
+		ms[i] = method
+		i++
+	}
+	sort.Strings(ms)
+	c.Response.Header().Set("Allow", strings.Join(ms, ", "))
 	if c.Request.Method != "OPTIONS" {
 		c.Response.WriteHeader(http.StatusMethodNotAllowed)
 	}

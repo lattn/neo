@@ -161,7 +161,7 @@ func parseMethods(methods string) []string {
 	seen := make(map[string]struct{}, len(parts))
 	for _, method := range parts {
 		method = strings.TrimSpace(method)
-		if method == "" || methodBit(method) == 0 {
+		if method == "" {
 			continue
 		}
 		if _, ok := seen[method]; ok {

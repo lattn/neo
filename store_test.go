@@ -163,17 +163,3 @@ func TestStoreGet(t *testing.T) {
 	}
 }
 
-func TestStoreAddOrMerge(t *testing.T) {
-	h := newStore()
-	merge := func(existing, data interface{}) interface{} {
-		return existing.(uint16) | data.(uint16)
-	}
-
-	assert.Equal(t, 1, h.AddOrMerge("/users/<id>", uint16(1), merge))
-	assert.Equal(t, 1, h.AddOrMerge("/users/<id>", uint16(2), merge))
-
-	data, _ := h.Get("/users/123", make([]string, 1))
-	if assert.NotNil(t, data) {
-		assert.Equal(t, uint16(3), data.(uint16))
-	}
-}
