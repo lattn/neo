@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"sync"
 )
@@ -43,15 +42,15 @@ type (
 
 // Methods lists all supported HTTP methods by Router.
 var Methods = []string{
-	"CONNECT",
-	"DELETE",
-	"GET",
-	"HEAD",
-	"OPTIONS",
-	"PATCH",
-	"POST",
-	"PUT",
-	"TRACE",
+	http.MethodConnect,
+	http.MethodDelete,
+	http.MethodGet,
+	http.MethodHead,
+	http.MethodOptions,
+	http.MethodPatch,
+	http.MethodPost,
+	http.MethodPut,
+	http.MethodTrace,
 }
 
 // New creates a new Router object.
@@ -82,11 +81,7 @@ func (r *Router) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	}
 	c.init(res, req)
 
-	path := req.URL.Path
-	if r.UseEscapedPath {
-		path = req.URL.EscapedPath()
-	}
-	path = r.normalizeRequestPath(path)
+	path := r.requestPath(req)
 
 	c.handlers, c.pnames = r.find(req.Method, path, c.pvalues)
 	if r.UseEscapedPath {
@@ -140,25 +135,12 @@ func (r *Router) Find(method, path string) (handlers []Handler, params map[strin
 
 // handleError is the error handler for handling any unhandled errors.
 func (r *Router) handleError(c *Context, err error) {
-	if errors.Is(err, defaultNotFoundHTTPError) {
-		writeDefaultNotFound(c.Response)
-		return
-	}
 	var httpError HTTPError
 	if errors.As(err, &httpError) {
 		http.Error(c.Response, httpError.Error(), httpError.StatusCode())
 	} else {
 		http.Error(c.Response, err.Error(), http.StatusInternalServerError)
 	}
-}
-
-func writeDefaultNotFound(w http.ResponseWriter) {
-	h := w.Header()
-	delete(h, HeaderContentLength)
-	h[HeaderContentType] = defaultNotFoundContentTypeHeader
-	h[HeaderXContentTypeOptions] = defaultNotFoundNoSniffHeaderValue
-	w.WriteHeader(http.StatusNotFound)
-	_, _ = w.Write(defaultNotFoundHTTPErrorBody)
 }
 
 func (r *Router) addRoute(route *Route, handlers []Handler) {
@@ -194,19 +176,31 @@ func (r *Router) find(method, path string, pvalues []string) (handlers []Handler
 	return r.notFoundHandlers, pnames
 }
 
-func (r *Router) findAllowedMethods(path string) map[string]bool {
-	methods := make(map[string]bool)
+func (r *Router) allowedMethods(path string) []string {
+	methods := make([]string, 0, len(r.stores))
 	pvalues := make([]string, r.maxParams)
-	for m, store := range r.stores {
+	for _, method := range Methods {
+		store := r.stores[method]
+		if store == nil {
+			continue
+		}
 		if handlers, _ := store.Get(path, pvalues); handlers != nil {
-			methods[m] = true
+			methods = append(methods, method)
 		}
 	}
 	return methods
 }
 
-func (r *Router) FindAllowedMethods(path string) map[string]bool {
-	return r.findAllowedMethods(path)
+func (r *Router) FindAllowedMethods(path string) []string {
+	return r.allowedMethods(path)
+}
+
+func (r *Router) requestPath(req *http.Request) string {
+	path := req.URL.Path
+	if r.UseEscapedPath {
+		path = req.URL.EscapedPath()
+	}
+	return r.normalizeRequestPath(path)
 }
 
 func (r *Router) normalizeRequestPath(path string) string {
@@ -225,31 +219,30 @@ func (r *Router) normalizeRequestPath(path string) string {
 
 // NotFoundHandler returns a 404 HTTP error indicating a request has no matching route.
 func NotFoundHandler(*Context) error {
-	return defaultNotFoundHTTPError
+	return ErrNotFound
+}
+
+func ensureOptionsMethod(methods []string) []string {
+	for _, method := range methods {
+		if method == http.MethodOptions {
+			return methods
+		}
+	}
+	return append(methods, http.MethodOptions)
 }
 
 // MethodNotAllowedHandler handles the situation when a request has matching route without matching HTTP method.
 // In this case, the handler will respond with an Allow HTTP header listing the allowed HTTP methods.
 // Otherwise, the handler will do nothing and let the next handler (usually a NotFoundHandler) to handle the problem.
 func MethodNotAllowedHandler(c *Context) error {
-	path := c.Request.URL.Path
-	if c.Router().UseEscapedPath {
-		path = c.Request.URL.EscapedPath()
-	}
-	methods := c.Router().findAllowedMethods(c.Router().normalizeRequestPath(path))
+	r := c.Router()
+	methods := r.allowedMethods(r.requestPath(c.Request))
 	if len(methods) == 0 {
 		return nil
 	}
-	methods["OPTIONS"] = true
-	ms := make([]string, len(methods))
-	i := 0
-	for method := range methods {
-		ms[i] = method
-		i++
-	}
-	sort.Strings(ms)
-	c.Response.Header().Set("Allow", strings.Join(ms, ", "))
-	if c.Request.Method != "OPTIONS" {
+	methods = ensureOptionsMethod(methods)
+	c.Response.Header().Set(HeaderAllow, strings.Join(methods, ", "))
+	if c.Request.Method != http.MethodOptions {
 		c.Response.WriteHeader(http.StatusMethodNotAllowed)
 	}
 	c.Abort()

@@ -29,19 +29,19 @@ func TestRouterNotFound(t *testing.T) {
 	res = httptest.NewRecorder()
 	req, _ = http.NewRequest("PUT", "/users", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "GET, POST, OPTIONS", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusMethodNotAllowed, res.Code, "HTTP status code")
 
 	res = httptest.NewRecorder()
 	req, _ = http.NewRequest("OPTIONS", "/users", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "GET, POST, OPTIONS", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusOK, res.Code, "HTTP status code")
 
 	res = httptest.NewRecorder()
 	req, _ = http.NewRequest("GET", "/users/", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusNotFound, res.Code, "HTTP status code")
 
 	r.IgnoreTrailingSlash = true
@@ -54,7 +54,7 @@ func TestRouterNotFound(t *testing.T) {
 	res = httptest.NewRecorder()
 	req, _ = http.NewRequest("PUT", "/users", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "GET, POST, OPTIONS", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusMethodNotAllowed, res.Code, "HTTP status code")
 }
 
@@ -79,14 +79,30 @@ func TestRouterAdd(t *testing.T) {
 	assert.Equal(t, 1, r.maxParams)
 }
 
-func TestRouterFind(t *testing.T) {
+func TestRouterFindAllowedMethods(t *testing.T) {
 	r := New()
-	r.add("GET", "/users/<id>", []Handler{NotFoundHandler})
-	handlers, params := r.Find("GET", "/users/1")
-	assert.Equal(t, 1, len(handlers))
-	if assert.Equal(t, 1, len(params)) {
-		assert.Equal(t, "1", params["id"])
-	}
+	r.Post("/users", NotFoundHandler)
+	r.Get("/users", NotFoundHandler)
+	r.Patch("/users", NotFoundHandler)
+
+	assert.Equal(t, []string{http.MethodGet, http.MethodPatch, http.MethodPost}, r.FindAllowedMethods("/users"))
+	assert.Empty(t, r.FindAllowedMethods("/users/1"))
+}
+
+func TestRouterMethodNotAllowedHandlerPreservesRegisteredOptions(t *testing.T) {
+	r := New()
+	r.Get("/users", NotFoundHandler)
+	r.Options("/users", NotFoundHandler)
+	r.Post("/users", NotFoundHandler)
+
+	res := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPut, "/users", nil)
+	c := NewContext(res, req)
+	c.router = r
+
+	assert.Nil(t, MethodNotAllowedHandler(c))
+	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get(HeaderAllow))
+	assert.Equal(t, http.StatusMethodNotAllowed, res.Code)
 }
 
 func TestRouterMethodNotAllowedOnParamRoute(t *testing.T) {
@@ -97,7 +113,7 @@ func TestRouterMethodNotAllowedOnParamRoute(t *testing.T) {
 	res := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/users/123", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "GET, POST, OPTIONS", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusMethodNotAllowed, res.Code, "HTTP status code")
 }
 
@@ -109,7 +125,7 @@ func TestRouterMethodNotAllowedOnWildcardRoute(t *testing.T) {
 	res := httptest.NewRecorder()
 	req, _ := http.NewRequest("PUT", "/files/a/b", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "GET, OPTIONS, POST", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "GET, POST, OPTIONS", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusMethodNotAllowed, res.Code, "HTTP status code")
 }
 
@@ -120,7 +136,7 @@ func TestRouterNotFoundDoesNotSetAllowHeader(t *testing.T) {
 	res := httptest.NewRecorder()
 	req, _ := http.NewRequest("GET", "/users/123/profile", nil)
 	r.ServeHTTP(res, req)
-	assert.Equal(t, "", res.Header().Get("Allow"), "Allow header")
+	assert.Equal(t, "", res.Header().Get(HeaderAllow), "Allow header")
 	assert.Equal(t, http.StatusNotFound, res.Code, "HTTP status code")
 }
 
