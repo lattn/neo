@@ -214,7 +214,7 @@ func TestRouterHandleErrorDefaultNotFound(t *testing.T) {
 	res.Header().Set(HeaderContentLength, "123")
 	c := &Context{Response: res}
 
-	r.handleError(c, defaultNotFoundHTTPError)
+	r.handleError(c, ErrNotFound)
 
 	assert.Equal(t, http.StatusNotFound, res.Code)
 	assert.Equal(t, "Not Found\n", res.Body.String())

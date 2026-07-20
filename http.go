@@ -1,7 +1,7 @@
 package neo
 
 const (
-	charsetUTF8 = "charset=UTF-8"
+	charsetUTF8 = "charset=utf-8"
 )
 
 // MIME types
